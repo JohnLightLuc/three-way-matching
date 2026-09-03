@@ -1,0 +1,2 @@
+Cœur métier isolé du framework (règle 8) — rempli à l'étape 3b :
+ThreeWayMatcher, value objects, enum MatchStatus. Aucune dépendance Laravel/Eloquent ici.

@@ -1,0 +1,103 @@
+erDiagram
+    SUPPLIERS ||--o{ PURCHASE_ORDERS : "passe"
+    PROJECTS ||--o{ PURCHASE_ORDERS : "porte"
+    PURCHASE_ORDERS ||--o{ PURCHASE_ORDER_LINES : "détaille"
+    PURCHASE_ORDERS ||--o{ DELIVERY_NOTES : "livré par"
+    PURCHASE_ORDERS ||--o{ INVOICES : "facturé par"
+    SUPPLIERS ||--o{ INVOICES : "émet"
+    DELIVERY_NOTES ||--o{ DELIVERY_NOTE_LINES : "contient"
+    PURCHASE_ORDER_LINES ||--o{ DELIVERY_NOTE_LINES : "reçue via"
+    INVOICES ||--o{ INVOICE_LINES : "contient"
+    PURCHASE_ORDER_LINES |o--o{ INVOICE_LINES : "facturée via"
+    INVOICE_LINES ||--o{ MATCH_DECISIONS : "évaluée par"
+    PURCHASE_ORDER_LINES ||--o{ MATCH_DECISIONS : "ancrée sur"
+    INVOICE_LINES ||--o| PAYMENT_AUTHORIZATIONS : "autorise"
+    MATCH_DECISIONS ||--o{ PAYMENT_AUTHORIZATIONS : "justifie"
+    MATCH_DECISIONS ||--o{ MATCH_DECISION_CONSUMPTIONS : "s'appuie sur"
+    DELIVERY_NOTE_LINES ||--o{ MATCH_DECISION_CONSUMPTIONS : "consommée par"
+
+    SUPPLIERS {
+        bigint id PK
+        string code UK
+        string name
+    }
+    PROJECTS {
+        bigint id PK
+        string code UK
+        string name
+    }
+    PURCHASE_ORDERS {
+        bigint id PK
+        string reference UK
+        bigint supplier_id FK
+        bigint project_id FK
+        string status
+        char currency
+    }
+    PURCHASE_ORDER_LINES {
+        bigint id PK
+        bigint purchase_order_id FK
+        int line_no
+        string article_code
+        string unit
+        decimal qty_ordered
+        decimal unit_price
+    }
+    DELIVERY_NOTES {
+        bigint id PK
+        string reference UK
+        bigint purchase_order_id FK
+        date received_at
+    }
+    DELIVERY_NOTE_LINES {
+        bigint id PK
+        bigint delivery_note_id FK
+        bigint purchase_order_line_id FK
+        decimal qty_received
+    }
+    INVOICES {
+        bigint id PK
+        string reference
+        bigint purchase_order_id FK
+        bigint supplier_id FK
+        date invoice_date
+        string status
+    }
+    INVOICE_LINES {
+        bigint id PK
+        bigint invoice_id FK
+        bigint purchase_order_line_id FK "nullable"
+        string article_code
+        decimal qty_invoiced
+        decimal unit_price
+    }
+    MATCH_DECISIONS {
+        bigint id PK
+        bigint invoice_line_id FK
+        bigint purchase_order_line_id FK
+        string status
+        decimal matchable_qty
+        decimal authorized_qty
+        decimal authorized_amount
+        decimal price_delta_pct
+        json reasons
+        string actor_type
+        string actor_id
+        datetime decided_at
+        json inputs_snapshot
+        bigint supersedes_id FK
+    }
+    MATCH_DECISION_CONSUMPTIONS {
+        bigint id PK
+        bigint match_decision_id FK
+        bigint delivery_note_line_id FK
+        decimal qty_consumed
+    }
+    PAYMENT_AUTHORIZATIONS {
+        bigint id PK
+        bigint invoice_line_id FK
+        bigint match_decision_id FK
+        decimal authorized_qty
+        decimal authorized_amount
+        string status
+    }
