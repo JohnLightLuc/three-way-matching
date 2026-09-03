@@ -83,4 +83,23 @@ final class InvoiceApiTest extends TestCase
             ->assertJsonPath('data.lines.0.decision', null)
             ->assertJsonPath('data.lines.0.payment_authorization', null);
     }
+
+    public function test_liste_les_factures_filtrables_par_statut_et_par_po(): void
+    {
+        $line = $this->poLine();
+        Invoice::factory()->forPurchaseOrder($line->purchaseOrder)->count(2)->create(['status' => 'submitted']);
+        Invoice::factory()->forPurchaseOrder($line->purchaseOrder)->create(['status' => 'needs_review']);
+        Invoice::factory()->create(['status' => 'submitted']); // autre PO
+
+        $this->actingAs($this->user(), 'sanctum')
+            ->getJson('/api/invoices?status=submitted')
+            ->assertOk()
+            ->assertJsonPath('meta.total', 3)
+            ->assertJsonStructure(['data' => [['id', 'reference', 'status', 'purchase_order', 'lines_count']]]);
+
+        $this->actingAs($this->user(), 'sanctum')
+            ->getJson("/api/invoices?purchase_order_id={$line->purchase_order_id}")
+            ->assertOk()
+            ->assertJsonPath('meta.total', 3);
+    }
 }

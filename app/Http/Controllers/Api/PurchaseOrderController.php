@@ -7,10 +7,24 @@ use App\Http\Requests\Api\StorePurchaseOrderRequest;
 use App\Http\Resources\PurchaseOrderResource;
 use App\Models\PurchaseOrder;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 
 class PurchaseOrderController extends Controller
 {
+    public function index(Request $request): AnonymousResourceCollection
+    {
+        $purchaseOrders = PurchaseOrder::query()
+            ->with(['supplier:id,code,name', 'project:id,code,name'])
+            ->withCount('lines')
+            ->when($request->query('status'), fn ($q, $status) => $q->where('status', $status))
+            ->latest('id')
+            ->paginate($request->integer('per_page', 20));
+
+        return PurchaseOrderResource::collection($purchaseOrders);
+    }
+
     public function store(StorePurchaseOrderRequest $request): JsonResponse
     {
         $purchaseOrder = DB::transaction(function () use ($request): PurchaseOrder {

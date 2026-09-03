@@ -8,10 +8,25 @@ use App\Http\Resources\InvoiceResource;
 use App\Models\Invoice;
 use App\Models\PurchaseOrder;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 
 class InvoiceController extends Controller
 {
+    public function index(Request $request): AnonymousResourceCollection
+    {
+        $invoices = Invoice::query()
+            ->with('purchaseOrder:id,reference')
+            ->withCount('lines')
+            ->when($request->query('status'), fn ($q, $status) => $q->where('status', $status))
+            ->when($request->query('purchase_order_id'), fn ($q, $id) => $q->where('purchase_order_id', $id))
+            ->latest('id')
+            ->paginate($request->integer('per_page', 20));
+
+        return InvoiceResource::collection($invoices);
+    }
+
     public function store(PurchaseOrder $purchaseOrder, StoreInvoiceRequest $request): JsonResponse
     {
         $invoice = DB::transaction(function () use ($purchaseOrder, $request): Invoice {

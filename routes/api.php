@@ -6,6 +6,8 @@ use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\MatchController;
 use App\Http\Controllers\Api\MatchDecisionController;
 use App\Http\Controllers\Api\PurchaseOrderController;
+use App\Models\Project;
+use App\Models\Supplier;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -26,7 +28,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
     Route::get('auth/me', [AuthController::class, 'me'])->name('auth.me');
 
+    // Référentiel (pour les formulaires de création)
+    Route::get('suppliers', fn () => Supplier::orderBy('name')->get(['id', 'code', 'name']))
+        ->name('suppliers.index');
+    Route::get('projects', fn () => Project::orderBy('name')->get(['id', 'code', 'name']))
+        ->name('projects.index');
+
     // Bons de commande
+    Route::get('purchase-orders', [PurchaseOrderController::class, 'index'])->name('purchase-orders.index');
     Route::post('purchase-orders', [PurchaseOrderController::class, 'store'])->name('purchase-orders.store');
     Route::get('purchase-orders/{purchaseOrder}', [PurchaseOrderController::class, 'show'])->name('purchase-orders.show');
 
@@ -35,12 +44,15 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('delivery-notes.store');
 
     // Factures (rattachées à un PO) + rapprochement
+    Route::get('invoices', [InvoiceController::class, 'index'])->name('invoices.index');
     Route::post('purchase-orders/{purchaseOrder}/invoices', [InvoiceController::class, 'store'])->name('invoices.store');
     Route::get('invoices/{invoice}', [InvoiceController::class, 'show'])->name('invoices.show');
     Route::post('invoices/{invoice}/match', [MatchController::class, 'store'])->name('invoices.match');
 
-    // Décisions de rapprochement : file de revue + révision humaine (F10)
+    // Décisions de rapprochement : file de revue + historique + révision humaine (F10)
     Route::get('match-decisions', [MatchDecisionController::class, 'index'])->name('match-decisions.index');
+    Route::get('invoice-lines/{invoiceLine}/decisions', [MatchDecisionController::class, 'history'])
+        ->name('invoice-lines.decisions');
     Route::post('match-decisions/{matchDecision}/review', [MatchDecisionController::class, 'review'])
         ->middleware('can:review-decisions')
         ->name('match-decisions.review');

@@ -30,6 +30,7 @@ class PurchaseOrderResource extends JsonResource
                 'code' => $this->project->code,
                 'name' => $this->project->name,
             ]),
+            'lines_count' => $this->whenCounted('lines'),
             'lines' => PurchaseOrderLineResource::collection($this->whenLoaded('lines')),
             'delivery_notes' => DeliveryNoteResource::collection($this->whenLoaded('deliveryNotes')),
             'invoices' => $this->whenLoaded('invoices', fn () => $this->invoices->map(fn ($i) => [
