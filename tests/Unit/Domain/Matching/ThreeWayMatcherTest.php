@@ -485,6 +485,78 @@ final class ThreeWayMatcherTest extends TestCase
     }
 
     /* ------------------------------------------------------------------ */
+    /*  authorizeOverride (révision humaine, F10) */
+    /* ------------------------------------------------------------------ */
+
+    public function test_authorize_override_ignore_l_anomalie_et_autorise_au_prix_du_po(): void
+    {
+        // Fournisseur incohérent + prix +25 % : evaluate() renverrait needs_review.
+        $input = $this->input(
+            orderLine: new OrderLineData(40, '50.000', '20.0000', 'PARP-20'),
+            invoiceLine: new InvoiceLineData(50, '50.000', '25.0000', 'PARP-20'),
+            claimedSupplierId: 999,
+            receipts: [$this->receipt(60, '2026-08-19', '50.000')],
+        );
+
+        $result = $this->matcher->authorizeOverride($input);
+
+        $this->assertSame(MatchStatus::Matched, $result->status);
+        $this->assertSame('50.000', (string) $result->authorizedQty);
+        $this->assertSame('1000.00', (string) $result->authorizedAmount); // 50 × 20 (prix PO), pas 25
+        $this->assertConsumes($result->consumedReceipts, [60 => '50.000']);
+    }
+
+    public function test_authorize_override_avec_quantite_partielle_donne_partially_matched(): void
+    {
+        $input = $this->input(
+            orderLine: new OrderLineData(41, '100.000', '10.0000', 'HA12'),
+            invoiceLine: new InvoiceLineData(51, '100.000', '10.0000', 'HA12'),
+            receipts: [$this->receipt(61, '2026-08-19', '100.000')],
+        );
+
+        $result = $this->matcher->authorizeOverride($input, BigDecimal::of('30.000'));
+
+        $this->assertSame(MatchStatus::PartiallyMatched, $result->status);
+        $this->assertSame('30.000', (string) $result->authorizedQty);
+        $this->assertSame('300.00', (string) $result->authorizedAmount);
+    }
+
+    public function test_authorize_override_refuse_plus_que_le_rapprochable(): void
+    {
+        $input = $this->input(
+            orderLine: new OrderLineData(42, '100.000', '10.0000', 'HA12'),
+            invoiceLine: new InvoiceLineData(52, '100.000', '10.0000', 'HA12'),
+            receipts: [$this->receipt(62, '2026-08-19', '40.000')], // seulement 40 reçus
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->matcher->authorizeOverride($input, BigDecimal::of('60.000'));
+    }
+
+    public function test_authorize_override_refuse_une_quantite_nulle(): void
+    {
+        $input = $this->input(
+            orderLine: new OrderLineData(43, '10.000', '10.0000', 'HA12'),
+            invoiceLine: new InvoiceLineData(53, '10.000', '10.0000', 'HA12'),
+            receipts: [$this->receipt(63, '2026-08-19', '10.000')],
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->matcher->authorizeOverride($input, BigDecimal::of('0'));
+    }
+
+    public function test_authorize_override_refuse_un_article_hors_po(): void
+    {
+        $input = $this->input(
+            orderLine: null,
+            invoiceLine: new InvoiceLineData(54, '10.000', '5.0000', 'HORS-PO'),
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->matcher->authorizeOverride($input);
+    }
+
+    /* ------------------------------------------------------------------ */
     /*  Helpers */
     /* ------------------------------------------------------------------ */
 

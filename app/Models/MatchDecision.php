@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\AppendOnly;
 use Database\Factories\MatchDecisionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -76,6 +77,23 @@ class MatchDecision extends Model
     public function supersedes(): BelongsTo
     {
         return $this->belongsTo(MatchDecision::class, 'supersedes_id');
+    }
+
+    /** Décision(s) qui remplacent celle-ci (0 ou 1). @return HasMany<MatchDecision, $this> */
+    public function supersededBy(): HasMany
+    {
+        return $this->hasMany(MatchDecision::class, 'supersedes_id');
+    }
+
+    /**
+     * Décisions COURANTES : celles qu'aucune autre ne remplace (règle 7 / M10).
+     * Une décision superseded a libéré son allocation et sort du pool.
+     *
+     * @param  Builder<MatchDecision>  $query
+     */
+    public function scopeCurrent(Builder $query): void
+    {
+        $query->whereDoesntHave('supersededBy');
     }
 
     /** DN imputés en FIFO par cette décision. @return HasMany<MatchDecisionConsumption, $this> */

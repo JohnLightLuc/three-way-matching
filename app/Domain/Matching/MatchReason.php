@@ -31,6 +31,12 @@ enum MatchReason: string
     /** Rien de disponible à rapprocher (aucun arrivage, ou stock déjà consommé). */
     case NothingReceived = 'nothing_received';
 
+    /** Un réviseur a autorisé la ligne malgré l'écart signalé (F10). */
+    case ReviewApproved = 'review_approved';
+
+    /** Un réviseur a confirmé l'écart : la ligne reste non autorisée (F10). */
+    case ReviewRejected = 'review_rejected';
+
     public function isAnomaly(): bool
     {
         return match ($this) {
@@ -38,7 +44,10 @@ enum MatchReason: string
             self::SupplierMismatch,
             self::OverInvoiced,
             self::PriceOutOfTolerance => true,
-            self::PartialReceipt, self::NothingReceived => false,
+            self::PartialReceipt,
+            self::NothingReceived,
+            self::ReviewApproved,
+            self::ReviewRejected => false,
         };
     }
 }

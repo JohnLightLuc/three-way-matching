@@ -6,6 +6,7 @@ namespace App\Domain\Matching;
 
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
+use InvalidArgumentException;
 use LogicException;
 
 /**
@@ -108,6 +109,74 @@ final class ThreeWayMatcher
             priceDeltaPct: $priceDeltaPct,
             reasons: $reasons,
             consumed: $consumed,
+            input: $input,
+            availOrder: $availOrder,
+            availReceived: $availReceived,
+            receivedTotal: $received,
+        );
+    }
+
+    /**
+     * Autorisation FORCÉE par une révision humaine (F10) : ignore la détection
+     * d'anomalie, mais réutilise le même calcul de disponibilités, le même
+     * plafond (rapprochable) et la même imputation FIFO — rien de « métier » ne
+     * fuit dans le service. Le motif review_approved et l'acteur sont ajoutés
+     * par le service qui persiste.
+     *
+     * @param  BigDecimal|null  $qtyOverride  quantité imposée par le réviseur ; null = tout le rapprochable
+     *
+     * @throws InvalidArgumentException si pas de ligne de PO, ou qté ≤ 0, ou qté > rapprochable
+     */
+    public function authorizeOverride(MatchInput $input, ?BigDecimal $qtyOverride = null): MatchResult
+    {
+        if ($input->orderLine === null) {
+            throw new InvalidArgumentException(
+                'authorizeOverride exige une ligne de PO : un article hors PO ne peut pas être approuvé (aucun prix de commande).'
+            );
+        }
+
+        $received = $this->sum($input->receipts, static fn (ReceiptData $r) => $r->qtyReceived);
+        $consumedElsewhere = $this->sum($input->receipts, static fn (ReceiptData $r) => $r->qtyAlreadyConsumed);
+        $availReceived = $this->floorZero($received->minus($consumedElsewhere));
+        $availOrder = $this->floorZero($input->orderLine->qtyOrdered->minus($input->qtyAlreadyMatched));
+
+        $qtyInvoiced = $input->invoiceLine->qtyInvoiced;
+        $matchableQty = BigDecimal::min($qtyInvoiced, $availOrder, $availReceived);
+
+        $authorizedQty = $qtyOverride ?? $matchableQty;
+
+        if ($authorizedQty->isNegativeOrZero()) {
+            throw new InvalidArgumentException('La quantité à autoriser doit être strictement positive (sinon : reject).');
+        }
+
+        if ($authorizedQty->isGreaterThan($matchableQty)) {
+            throw new InvalidArgumentException(sprintf(
+                'Quantité demandée (%s) supérieure au rapprochable (%s) : commande ou réception insuffisantes.',
+                $authorizedQty,
+                $matchableQty,
+            ));
+        }
+
+        $authorizedQty = $this->qty($authorizedQty);
+
+        $status = $authorizedQty->isEqualTo($this->qty($qtyInvoiced))
+            ? MatchStatus::Matched
+            : MatchStatus::PartiallyMatched;
+
+        $reasons = $status === MatchStatus::PartiallyMatched
+            ? [new Reason(MatchReason::PartialReceipt, [
+                'qty_invoiced' => (string) $qtyInvoiced,
+                'qty_authorized' => (string) $authorizedQty,
+            ])]
+            : [];
+
+        return $this->build(
+            $status,
+            matchableQty: $matchableQty,
+            authorizedQty: $authorizedQty,
+            priceDeltaPct: $this->priceDeltaPct($input),
+            reasons: $reasons,
+            consumed: $this->allocateFifo($input->receipts, $authorizedQty),
             input: $input,
             availOrder: $availOrder,
             availReceived: $availReceived,

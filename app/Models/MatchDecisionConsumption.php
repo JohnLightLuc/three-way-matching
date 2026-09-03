@@ -21,6 +21,7 @@ class MatchDecisionConsumption extends Model
 {
     /** @use HasFactory<MatchDecisionConsumptionFactory> */
     use AppendOnly;
+
     use HasFactory;
 
     /** @return array<string, string> */
