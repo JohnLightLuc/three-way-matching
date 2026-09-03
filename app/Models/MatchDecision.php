@@ -28,7 +28,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'price_delta_pct',
     'reasons',
     'actor_type',
-    'actor_id',
+    'actor_user_id',
     'decided_at',
     'inputs_snapshot',
     'supersedes_id',
@@ -37,6 +37,7 @@ class MatchDecision extends Model
 {
     /** @use HasFactory<MatchDecisionFactory> */
     use AppendOnly;
+
     use HasFactory;
 
     /** @return array<string, string> */
@@ -57,6 +58,12 @@ class MatchDecision extends Model
     public function invoiceLine(): BelongsTo
     {
         return $this->belongsTo(InvoiceLine::class);
+    }
+
+    /** Réviseur humain à l'origine de la décision ; null quand actor_type = system. @return BelongsTo<User, $this> */
+    public function actorUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'actor_user_id');
     }
 
     /** @return BelongsTo<PurchaseOrderLine, $this> */

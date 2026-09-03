@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Models\InvoiceLine;
 use App\Models\MatchDecision;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -27,7 +28,7 @@ class MatchDecisionFactory extends Factory
             'price_delta_pct' => null,
             'reasons' => [],
             'actor_type' => 'system',
-            'actor_id' => null,
+            'actor_user_id' => null,
             'decided_at' => now(),
             'inputs_snapshot' => [],
             'supersedes_id' => null,
@@ -37,13 +38,13 @@ class MatchDecisionFactory extends Factory
     /** Décision produite par le moteur. */
     public function system(): static
     {
-        return $this->state(['actor_type' => 'system', 'actor_id' => null]);
+        return $this->state(['actor_type' => 'system', 'actor_user_id' => null]);
     }
 
     /** Décision produite par une révision humaine (F10). */
-    public function byUser(string $actorId): static
+    public function byUser(User $user): static
     {
-        return $this->state(['actor_type' => 'user', 'actor_id' => $actorId]);
+        return $this->state(['actor_type' => 'user', 'actor_user_id' => $user->id]);
     }
 
     /** Écart signalé : rien n'est autorisé (règles 4 & 6). */

@@ -10,11 +10,14 @@ class DatabaseSeeder extends Seeder
     use WithoutModelEvents;
 
     /**
-     * Seed la base : jeu de démonstration du moteur de rapprochement 3 voies.
-     * (Pas d'utilisateur : l'authentification est hors périmètre — CONCEPTION.md §4.)
+     * Seed la base : utilisateurs de démo, puis jeu de démonstration du moteur
+     * de rapprochement 3 voies.
      */
     public function run(): void
     {
-        $this->call(DemoSeeder::class);
+        $this->call([
+            UserSeeder::class,
+            DemoSeeder::class,
+        ]);
     }
 }
