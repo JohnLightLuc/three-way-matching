@@ -23,6 +23,11 @@ class InvoiceResource extends JsonResource
             'invoice_date' => $this->invoice_date?->toDateString(),
             'currency' => $this->currency,
             'notes' => $this->notes,
+            'purchase_order' => $this->whenLoaded('purchaseOrder', fn () => [
+                'id' => $this->purchaseOrder->id,
+                'reference' => $this->purchaseOrder->reference,
+            ]),
+            'lines_count' => $this->whenCounted('lines'),
             'lines' => InvoiceLineResource::collection($this->whenLoaded('lines')),
         ];
     }

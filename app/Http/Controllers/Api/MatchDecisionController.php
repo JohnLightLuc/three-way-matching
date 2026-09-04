@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\ReviewMatchDecisionRequest;
 use App\Http\Resources\MatchDecisionResource;
+use App\Models\InvoiceLine;
 use App\Models\MatchDecision;
 use App\Services\ThreeWayMatchingService;
 use Illuminate\Http\Request;
@@ -27,7 +28,18 @@ class MatchDecisionController extends Controller
             ->current()
             ->where('status', $status)
             ->when($status === 'needs_review', fn ($q) => $q->where('actor_type', 'system'))
-            ->with('consumptions')
+            ->with(['consumptions', 'invoiceLine:id,invoice_id,article_code,qty_invoiced,unit_price', 'invoiceLine.invoice:id,reference'])
+            ->orderByDesc('id')
+            ->get();
+
+        return MatchDecisionResource::collection($decisions);
+    }
+
+    /** Historique complet des décisions d'une ligne de facture (chaîne supersedes), la plus récente d'abord. */
+    public function history(InvoiceLine $invoiceLine): AnonymousResourceCollection
+    {
+        $decisions = $invoiceLine->matchDecisions()
+            ->with(['consumptions', 'actorUser:id,name', 'supersededBy:id,supersedes_id'])
             ->orderByDesc('id')
             ->get();
 

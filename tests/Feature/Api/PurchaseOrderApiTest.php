@@ -92,8 +92,26 @@ final class PurchaseOrderApiTest extends TestCase
             ->assertJsonPath('data.lines.0.qty_available', '100.000');
     }
 
+    public function test_liste_paginee_et_filtrable_par_statut(): void
+    {
+        PurchaseOrder::factory()->count(3)->create(['status' => 'open']);
+        PurchaseOrder::factory()->create(['status' => 'closed']);
+
+        $this->actingAs($this->user(), 'sanctum')
+            ->getJson('/api/purchase-orders')
+            ->assertOk()
+            ->assertJsonStructure(['data' => [['id', 'reference', 'status', 'supplier', 'project', 'lines_count']], 'meta' => ['total']])
+            ->assertJsonPath('meta.total', 4);
+
+        $this->actingAs($this->user(), 'sanctum')
+            ->getJson('/api/purchase-orders?status=closed')
+            ->assertOk()
+            ->assertJsonPath('meta.total', 1);
+    }
+
     public function test_route_protegee(): void
     {
         $this->postJson('/api/purchase-orders', [])->assertUnauthorized();
+        $this->getJson('/api/purchase-orders')->assertUnauthorized();
     }
 }
