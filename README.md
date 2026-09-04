@@ -1,58 +1,184 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Moteur de rapprochement à 3 voies (*3-way matching*)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Contrôle financier d'un ERP BTP : un règlement fournisseur n'est autorisé que
+pour la portion d'une facture **prouvée à la fois** par le bon de commande (PO),
+le bon de livraison (DN) et la facture — mêmes quantités, même prix, même
+fournisseur. Le système n'autorise jamais « sur confiance » : il calcule la
+part concordante, signale les écarts pour revue humaine, et trace chaque
+décision de façon inaltérable.
 
-## About Laravel
+Objectif métier : prévenir la fraude (livraisons fictives, manipulation de prix,
+paiements en double).
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- Spécification : [`docs/CONCEPTION.md`](docs/CONCEPTION.md) (besoins F1–F10, modèle 11 tables)
+- Choix d'implémentation : [`DECISIONS.md`](DECISIONS.md)
+- Modèle de données : [`docs/modele_donnees_3way.mermaid`](docs/modele_donnees_3way.mermaid)
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Principes clés
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+| Principe | Mise en œuvre |
+|---|---|
+| La **ligne de PO** est le pivot unique | DN et factures s'y rattachent par FK ; aucun lien direct DN ↔ facture. |
+| Journal **append-only** | `match_decisions` : jamais d'`UPDATE`/`DELETE`, chaque révision crée une ligne liée par `supersedes_id`. |
+| **Précision décimale** | `brick/math\BigDecimal` dans le cœur métier — jamais de `float`. |
+| **Idempotence** | Rejouer un rapprochement sur le même état redonne le même résultat. |
+| **Cœur métier isolé** | `app/Domain/Matching/` ne connaît ni Eloquent ni la base ; testable sans booter Laravel. |
+| **Anomalie → revue humaine** | Écart de prix/quantité, fournisseur incohérent, article hors PO → statut `needs_review`, 0 autorisé. |
 
-## Learning Laravel
+## Stack technique
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+- **PHP 8.3+**, **Laravel 13**
+- **SQLite** (par défaut, zéro configuration)
+- **Laravel Sanctum** — authentification par token + session SPA
+- **Inertia.js + Vue 3 + Vite 8** — interface opérateur
+- **Tailwind CSS 4**
+- **PHPUnit 12** — tests unitaires (cœur métier) et fonctionnels (API + web)
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Prérequis
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```sh
+php -v        # >= 8.3
+composer -V
+node -v       # >= 20 recommandé
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Si PHP ou Composer manque sur macOS :
 
-## Contributing
+```sh
+/bin/bash -c "$(curl -fsSL https://php.new/install/mac/8.5)"
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Installation
 
-## Code of Conduct
+```sh
+# 1. Dépendances
+composer install
+npm install
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+# 2. Environnement
+cp .env.example .env
+php artisan key:generate
 
-## Security Vulnerabilities
+# 3. Base de données SQLite + jeu de démonstration
+touch database/database.sqlite
+php artisan migrate --seed
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Le fichier `.env` est déjà configuré pour SQLite (`DB_CONNECTION=sqlite`). Aucune
+base externe n'est nécessaire.
 
-## License
+Le seed (`DatabaseSeeder`) charge :
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+- 3 utilisateurs de démo (`UserSeeder`)
+- un jeu **déterministe** couvrant les 10 cas limites et les 4 statuts de
+  rapprochement (`DemoSeeder`) — état d'entrée uniquement (PO / DN / factures) ;
+  les décisions sont produites par le moteur via l'API.
+
+## Lancer le projet
+
+### Tout-en-un (recommandé)
+
+```sh
+composer dev
+```
+
+Démarre en parallèle : serveur PHP (`http://localhost:8000`), worker de file,
+logs (`pail`) et Vite (HMR).
+
+### Ou manuellement, dans deux terminaux
+
+```sh
+php artisan serve      # http://localhost:8000
+npm run dev            # bundler Vite avec HMR
+```
+
+Pour un build de production du front :
+
+```sh
+npm run build
+```
+
+Ouvrir ensuite **http://localhost:8000** et se connecter avec un compte de démo.
+
+## Comptes de démonstration
+
+Mot de passe commun : **`password`**
+
+| Email | Rôle | Peut trancher les écarts (`is_reviewer`) |
+|---|---|---|
+| `buyer@demo.test` | Achats | non |
+| `clerk@demo.test` | Comptabilité fournisseurs | non |
+| `reviewer@demo.test` | Contrôleur / réviseur | **oui** |
+
+## Tests
+
+```sh
+composer test
+# ou
+php artisan test
+```
+
+Les tests tournent sur une base SQLite en mémoire (voir `phpunit.xml`) :
+
+- `tests/Unit/Domain` — cœur métier `ThreeWayMatcher` (sans Laravel)
+- `tests/Feature/Api` — endpoints REST, orchestration, journal de décisions
+- `tests/Feature/Web` — pages Inertia et authentification
+
+## API
+
+Toutes les routes métier sont sous le préfixe `/api` et derrière
+`auth:sanctum`. La révision d'un écart exige en plus la capacité
+`review-decisions`.
+
+| Méthode & route | Rôle |
+|---|---|
+| `POST /api/auth/login` | Obtenir un token (throttle 6/min) |
+| `POST /api/auth/logout` · `GET /api/auth/me` | Session courante |
+| `GET /api/suppliers` · `GET /api/projects` | Référentiel |
+| `GET/POST /api/purchase-orders` · `GET /api/purchase-orders/{id}` | Bons de commande |
+| `POST /api/purchase-orders/{id}/delivery-notes` | Enregistrer un bon de livraison |
+| `GET /api/invoices` · `POST /api/purchase-orders/{id}/invoices` · `GET /api/invoices/{id}` | Factures |
+| `POST /api/invoices/{id}/match` | **Lancer / rejouer le rapprochement** |
+| `GET /api/match-decisions` | File de revue (décisions `needs_review` système) |
+| `GET /api/invoice-lines/{id}/decisions` | Historique des décisions d'une ligne |
+| `POST /api/match-decisions/{id}/review` | Trancher un écart (`approve` / `reject`) — réviseur uniquement |
+
+### Postman
+
+Collection et environnement prêts à l'emploi dans [`docs/`](docs/) :
+
+- `docs/postman_collection.json`
+- `docs/postman_environment.json` (`baseUrl = http://127.0.0.1:8000`)
+
+Exécuter d'abord la requête *login* : le token est stocké automatiquement dans
+la variable d'environnement.
+
+## Structure du projet
+
+```
+app/
+  Domain/Matching/      Cœur métier pur (ThreeWayMatcher, value objects, enums) — sans Laravel
+  Services/             ThreeWayMatchingService — orchestration, transactions, verrous, FIFO
+  Http/Controllers/Api/ Endpoints REST
+  Http/Controllers/Web/ Authentification des pages Inertia
+  Http/Middleware/      RecordActivity (journal d'audit), HandleInertiaRequests
+  Models/               Eloquent ; Concerns/AppendOnly protège match_decisions
+database/
+  migrations/           11 tables métier + Sanctum + activity_logs + contraintes CHECK
+  seeders/              UserSeeder, DemoSeeder (jeu déterministe)
+resources/js/           Front Inertia + Vue 3 (Pages, Components, Layouts, composables)
+config/matching.php     Seuils de tolérance (prix 1 %, quantité 0)
+docs/                   CONCEPTION.md, DECISIONS via /DECISIONS.md, collection Postman
+tests/                  Unit/Domain, Feature/Api, Feature/Web
+```
+
+## Configuration des tolérances
+
+`config/matching.php` — jamais lues « en dur », et **recopiées dans chaque
+décision** (`inputs_snapshot`) pour rester reproductible même si les seuils
+changent ensuite.
+
+| Clé | Défaut | Sens |
+|---|---|---|
+| `price_tolerance_pct` | `0.01` | Écart de prix unitaire toléré (1 %). Un écart exactement égal est accepté. |
+| `qty_tolerance_abs` | `0.0` | Écart de quantité absolu toléré. |
