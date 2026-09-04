@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\AppendOnly;
 use Database\Factories\MatchDecisionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -28,7 +29,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'price_delta_pct',
     'reasons',
     'actor_type',
-    'actor_id',
+    'actor_user_id',
     'decided_at',
     'inputs_snapshot',
     'supersedes_id',
@@ -37,6 +38,7 @@ class MatchDecision extends Model
 {
     /** @use HasFactory<MatchDecisionFactory> */
     use AppendOnly;
+
     use HasFactory;
 
     /** @return array<string, string> */
@@ -59,6 +61,12 @@ class MatchDecision extends Model
         return $this->belongsTo(InvoiceLine::class);
     }
 
+    /** Réviseur humain à l'origine de la décision ; null quand actor_type = system. @return BelongsTo<User, $this> */
+    public function actorUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'actor_user_id');
+    }
+
     /** @return BelongsTo<PurchaseOrderLine, $this> */
     public function purchaseOrderLine(): BelongsTo
     {
@@ -69,6 +77,23 @@ class MatchDecision extends Model
     public function supersedes(): BelongsTo
     {
         return $this->belongsTo(MatchDecision::class, 'supersedes_id');
+    }
+
+    /** Décision(s) qui remplacent celle-ci (0 ou 1). @return HasMany<MatchDecision, $this> */
+    public function supersededBy(): HasMany
+    {
+        return $this->hasMany(MatchDecision::class, 'supersedes_id');
+    }
+
+    /**
+     * Décisions COURANTES : celles qu'aucune autre ne remplace (règle 7 / M10).
+     * Une décision superseded a libéré son allocation et sort du pool.
+     *
+     * @param  Builder<MatchDecision>  $query
+     */
+    public function scopeCurrent(Builder $query): void
+    {
+        $query->whereDoesntHave('supersededBy');
     }
 
     /** DN imputés en FIFO par cette décision. @return HasMany<MatchDecisionConsumption, $this> */

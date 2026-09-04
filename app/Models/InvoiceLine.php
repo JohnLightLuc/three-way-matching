@@ -54,6 +54,14 @@ class InvoiceLine extends Model
         return $this->hasMany(MatchDecision::class);
     }
 
+    /** Décision COURANTE (celle qu'aucune autre ne remplace). @return HasOne<MatchDecision, $this> */
+    public function currentMatchDecision(): HasOne
+    {
+        return $this->hasOne(MatchDecision::class)
+            ->whereDoesntHave('supersededBy')
+            ->latestOfMany();
+    }
+
     /** Autorisation de paiement courante (0 ou 1 active). @return HasOne<PaymentAuthorization, $this> */
     public function paymentAuthorization(): HasOne
     {
