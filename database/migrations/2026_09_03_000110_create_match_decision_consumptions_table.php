@@ -39,7 +39,8 @@ return new class extends Migration
             $table->decimal('qty_consumed', 14, 3);
             $table->timestamps();
 
-            $table->unique(['match_decision_id', 'delivery_note_line_id']);
+            // Nom explicite : l'auto-généré dépasse la limite de 64 caractères de MySQL.
+            $table->unique(['match_decision_id', 'delivery_note_line_id'], 'mdc_decision_dn_line_unique');
         });
     }
 
